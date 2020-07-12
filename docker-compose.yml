@@ -1,0 +1,263 @@
+version: "3.7"
+
+services:
+  mysql-server-1:
+    image: 10.2.0.1:5000/ea_mysql_server
+    environment:
+      - NAME={{.Task.Name}}
+    env_file:
+      - ea_mysql_server/mysql-server.env
+    command: ["mysqld","--server_id=1","--binlog_checksum=NONE","--gtid_mode=ON","--enforce_gtid_consistency=ON","--log_bin","--log_slave_updates=ON","--master_info_repository=TABLE","--relay_log_info_repository=TABLE","--transaction_write_set_extraction=XXHASH64","--user=mysql","--skip-host-cache","--skip-name-resolve", "--default_authentication_plugin=mysql_native_password"]
+    volumes:
+      - /nfs/easyApplication/ea-data1:/var/lib/mysql
+    networks:
+      - database
+    extra_hosts:
+      - "mysql-server-1:127.0.0.1"
+    secrets:
+      - ea_app_db_user
+      - ea_app_db_pw
+      - ea_app_db
+      - ea_mysql_pw
+    configs:
+      - source: ea_telegraf_server1
+        target: /telegraf.conf
+    logging:
+      driver: syslog
+      options:
+          syslog-address: "tcp://10.5.0.115:5000"
+          syslog-format: rfc5424
+          tag: "{{.Name}}/{{.ID}}/"
+
+  mysql-server-2:
+    image: 10.2.0.1:5000/ea_mysql_server
+    environment:
+      - NAME={{.Task.Name}}
+    env_file:
+      - ea_mysql_server/mysql-server.env
+    command: ["mysqld","--server_id=2","--binlog_checksum=NONE","--gtid_mode=ON","--enforce_gtid_consistency=ON","--log_bin","--log_slave_updates=ON","--master_info_repository=TABLE","--relay_log_info_repository=TABLE","--transaction_write_set_extraction=XXHASH64","--user=mysql","--skip-host-cache","--skip-name-resolve", "--default_authentication_plugin=mysql_native_password"]
+    volumes:
+      - /nfs/easyApplication/ea-data2:/var/lib/mysql
+    networks:
+      - database
+    extra_hosts:
+      - "mysql-server-2:127.0.0.1"
+    secrets:
+      - ea_app_db_user
+      - ea_app_db_pw
+      - ea_app_db
+      - ea_mysql_pw
+    configs:
+      - source: ea_telegraf_server2
+        target: /telegraf.conf
+    logging:
+      driver: syslog
+      options:
+          syslog-address: "tcp://10.5.0.115:5000"
+          syslog-format: rfc5424
+          tag: "{{.Name}}/{{.ID}}/"
+  
+  mysql-server-3:
+    image: 10.2.0.1:5000/ea_mysql_server
+    environment:
+      - NAME={{.Task.Name}}
+    env_file:
+      - ea_mysql_server/mysql-server.env
+    command: ["mysqld","--server_id=3","--binlog_checksum=NONE","--gtid_mode=ON","--enforce_gtid_consistency=ON","--log_bin","--log_slave_updates=ON","--master_info_repository=TABLE","--relay_log_info_repository=TABLE","--transaction_write_set_extraction=XXHASH64","--user=mysql","--skip-host-cache","--skip-name-resolve", "--default_authentication_plugin=mysql_native_password"]
+    volumes:
+      - /nfs/easyApplication/ea-data3:/var/lib/mysql
+    networks:
+      - database
+    extra_hosts:
+      - "mysql-server-3:127.0.0.1"
+    secrets:
+      - ea_app_db_user
+      - ea_app_db_pw
+      - ea_app_db
+      - ea_mysql_pw
+    configs:
+      - source: ea_telegraf_server3
+        target: /telegraf.conf
+    logging:
+      driver: syslog
+      options:
+          syslog-address: "tcp://10.5.0.115:5000"
+          syslog-format: rfc5424
+          tag: "{{.Name}}/{{.ID}}/"
+
+  mysql-shell:
+    image: 10.2.0.1:5000/ea_mysql_shell
+    environment:
+      - NAME={{.Task.Name}}
+    env_file:
+      - ea_mysql_shell/mysql-shell.env
+    volumes:
+      - /nfs/easyApplication/scripts/:/scripts/
+    networks:
+      - database
+    depends_on:
+      - mysql-server-1
+      - mysql-server-2
+      - mysql-server-3
+    secrets:
+      - ea_mysql_user
+      - ea_mysql_pw
+    logging:
+      driver: syslog
+      options:
+          syslog-address: "tcp://10.5.0.115:5000"
+          syslog-format: rfc5424
+          tag: "{{.Name}}/{{.ID}}/"
+
+  mysql-router:
+    image: 10.2.0.1:5000/ea_mysql_router
+    environment:
+      - NAME={{.Task.Name}}
+    env_file:
+      - ea_mysql_router/mysql-router.env
+    networks:
+        - backend
+        - database
+    volumes:
+      - /nfs/easyApplication/ea-router:/var/lib/mysqlrouter
+    depends_on:
+      - mysql-server-1
+      - mysql-server-2
+      - mysql-server-3
+      - mysql-shell
+    deploy:
+      replicas: 2
+    secrets:
+      - ea_mysql_user
+      - ea_mysql_pw
+    configs:
+      - source: ea_telegraf_router
+        target: /telegraf.conf
+    logging:
+      driver: syslog
+      options:
+          syslog-address: "tcp://10.5.0.115:5000"
+          syslog-format: rfc5424
+          tag: "{{.Name}}/{{.ID}}/"
+
+  application1:
+    image: 10.2.0.1:5000/ea_app
+    environment:
+      - NAME={{.Task.Name}}
+    env_file:
+      - ea_app/app.env
+    networks:
+      - backend
+      - frontend
+    volumes:
+      - /nfs/easyApplication/ea-storage1:/var/www/html/src/storage
+    depends_on:
+      - mysql-router
+    secrets:
+      - ea_app_db_user
+      - ea_app_db_pw
+      - ea_app_db
+    configs:
+      - source: ea_telegraf_app1
+        target: /telegraf.conf
+    logging:
+      driver: syslog
+      options:
+          syslog-address: "tcp://10.5.0.115:5000"
+          syslog-format: rfc5424
+          tag: "{{.Name}}/{{.ID}}/"
+  
+  application2:
+    image: 10.2.0.1:5000/ea_app
+    environment:
+      - NAME={{.Task.Name}}
+    env_file:
+      - ea_app/app.env
+    networks:
+      - backend
+      - frontend
+    volumes:
+      - /nfs/easyApplication/ea-storage2:/var/www/html/src/storage
+    depends_on:
+      - mysql-router
+    secrets:
+      - ea_app_db_user
+      - ea_app_db_pw
+      - ea_app_db
+    configs:
+      - source: ea_telegraf_app2
+        target: /telegraf.conf
+    logging:
+      driver: syslog
+      options:
+          syslog-address: "tcp://10.5.0.115:5000"
+          syslog-format: rfc5424
+          tag: "{{.Name}}/{{.ID}}/"
+
+  nginx-proxy:
+    image: 10.2.0.1:5000/ea_nginx
+    environment:
+      - NAME={{.Task.Name}}
+    ports:
+      - "54000:80"
+    networks:
+      - frontend
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - /nfs/easyApplication/ea-nginx/assets:/assets/
+    depends_on:
+      - application
+    configs:
+      - source: ea_nginx
+        target: /etc/nginx/nginx.conf
+      - source: ea_telegraf_nginx
+        target: /telegraf.conf
+    deploy:
+      replicas: 2
+    logging:
+      driver: syslog
+      options:
+          syslog-address: "tcp://10.5.0.115:5000"
+          syslog-format: rfc5424
+          tag: "{{.Name}}/{{.ID}}/"
+
+
+networks:
+  frontend:
+    driver: overlay
+
+  backend:
+    driver: overlay
+
+  database:
+    driver: overlay
+
+configs:
+  ea_nginx:
+    external: true
+  ea_telegraf_app1:
+    external: true
+  ea_telegraf_app2:
+    external: true
+  ea_telegraf_router:
+    external: true
+  ea_telegraf_server1:
+    external: true
+  ea_telegraf_server2:
+    external: true
+  ea_telegraf_server3:
+    external: true
+  ea_telegraf_nginx:
+    external: true
+
+secrets:
+  ea_app_db_user:
+    external: true
+  ea_app_db_pw:
+    external: true
+  ea_app_db:
+    external: true
+  ea_mysql_user:
+    external: true
+  ea_mysql_pw:
+    external: true
